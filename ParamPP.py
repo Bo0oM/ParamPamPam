@@ -1,0 +1,426 @@
+# coding=utf-8
+
+import argparse
+import asyncio
+import os
+from concurrent.futures import ProcessPoolExecutor
+from http.cookies import SimpleCookie
+from itertools import islice
+import random
+import string
+from bs4 import BeautifulSoup
+from typing import Generator
+from pyjsparser import PyJsParser
+import esprima
+from urllib.parse import urlencode, urlparse, urljoin
+
+from requests import request, Response, RequestException
+# pip install python-Levenshtein
+from fuzzywuzzy import fuzz
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+SSLVERIFY=False
+USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36'
+URLENCODED_CONTENT_TYPE = 'application/x-www-form-urlencoded'
+DEFAULT_URL_BUF_SIZE = 8192
+
+ENTITY_TOO_LARGE = 413
+URI_TOO_LARGE = 414
+NUM_PROCESSES = 10
+
+
+def split_dict(d: dict) -> (dict, dict):
+    """
+    Разбивает словарь d пополам
+    :param d: dict
+    :return: dict, dict
+    """
+    n = len(d) // 2
+    i = iter(d.items())
+
+    d1 = dict(islice(i, n))
+    d2 = dict(i)
+
+    return d1, d2
+
+
+class ParamFinder:
+
+    def __init__(self, url, method, cookie='',
+                 useragent=USERAGENT,
+                 content_type=URLENCODED_CONTENT_TYPE,
+                 default_value=1, timeout=10):
+        """
+        Конструктор ParamFinder
+        :param url: URL
+        :param method: тип запроса (GET, POST, PUT)
+        :param cookie: строка с куками
+        :param content_type: тип содержимого
+        :param useragent: ну логично же, что это
+        :param default_value: значение для параметра по умолчанию
+        :param timeout: таймаут запросов
+        """
+        self.url = url
+        self.req_params = {
+            'method': method.lower(),
+            'timeout': timeout
+        }
+        self.arg_param = 'params'
+
+        self.useragent = useragent
+
+        if cookie:
+            self.cookie = cookie
+
+        if self.method in {'post', 'put'}:
+            self.content_type = content_type
+
+        self.default_value = default_value
+
+        self._orig_response = request(url=url, verify=SSLVERIFY, **self.req_params)
+
+        #!!!
+        # Убрана проверка статуса, так как есть смысл брутить параметры у страниц, отдающих ошибки (например 500)
+        #self._orig_response.raise_for_status()
+
+
+        self.max_data_size = self._estimate_data_size(DEFAULT_URL_BUF_SIZE)
+        self._metrics = self._choose_metrics()
+
+
+
+# Timeout
+    @property
+    def timeout(self):
+        return self.req_params.get('timeout')
+
+    @timeout.setter
+    def timeout(self, value):
+        self.req_params['timeout'] = value
+
+# Cookie
+    @property
+    def cookie(self):
+        return self.req_params.get('cookie')
+
+
+    @cookie.setter
+    def cookie(self, value):
+        self.req_params['cookie'] = SimpleCookie(value)
+
+# User-agent
+    @property
+    def useragent(self):
+        return self.req_params.get('headers', {}).get(
+            'User-agent', USERAGENT
+        )
+
+    @useragent.setter
+    def useragent(self, value):
+        headers = self.req_params.setdefault('headers', {})
+        headers['User-agent'] = value
+
+# Content-type
+    @property
+    def content_type(self):
+        return self.req_params.get('headers', {}).get(
+            'Content-Type', URLENCODED_CONTENT_TYPE
+        )
+
+    @content_type.setter
+    def content_type(self, value):
+        headers = self.req_params.setdefault('headers', {})
+        headers['Content-Type'] = value
+        self._setup_arg_param()
+
+# Method
+    @property
+    def method(self):
+        return self.req_params.get('method')
+
+    @method.setter
+    def method(self, value):
+        self.req_params['method'] = value.lower()
+        self._setup_arg_param()
+
+    def _setup_arg_param(self):
+        """
+        Настраивает параметр для запроса в зависимости от типа запроса и
+        типа содержимого
+        :return:
+        """
+        # для POST/PUT и не urlencoded помещаем данные в тело запроса,
+        # в противном случае - query string
+        if (self.method in {'post', 'put'}
+                and self.content_type != URLENCODED_CONTENT_TYPE):
+            self.arg_param = 'data'
+        else:
+            self.arg_param = 'params'
+
+    def _estimate_data_size(self, buf_size):
+        """
+        Вычисляет макс. допустимый объем данных для отправки
+        :param buf_size: начальное значение
+        :return: макс. объем (в байтах)
+        """
+        if self.arg_param == 'params':
+            # Остаточный размер URI =
+            #   размер буфера -
+            #   длина базового +
+            #   "мусорная" длина (не учитывается сервером) -
+            #   3 (доп. символа)
+
+            fullurl = urlparse(self.url)
+            trash_len = len(fullurl.scheme+'://'+fullurl.netloc)
+            remained_len = buf_size - len(self.url) + trash_len - 3
+        else:
+            # Остаточный размер данных = размер буфера - 2 (доп. символа)
+            remained_len = buf_size - 2
+
+        data = 'a' * remained_len
+        try:
+            dummy_response = request(url=self.url, verify=SSLVERIFY, **self._wrap_params({data: 1}))
+        except RequestException as e:
+            print( e )
+        #print (dummy_response.status_code)
+        if dummy_response.status_code in {ENTITY_TOO_LARGE, URI_TOO_LARGE}:
+            return self._estimate_data_size(buf_size // 2)
+
+        # Не учитываем два доп. символа в итоге
+        return remained_len + 2
+
+    def _choose_metrics(self) -> list:
+        """
+        Выбирает метрики, подходящие для сравнения страниц между собой.
+        :return: Список метрик (функторов)
+        """
+
+        metrics = [self._content_length_check, self._lev_distance_check, self._dom_check]
+
+        for k in [10, 15, 20]:
+            not_param = ''.join(random.choices(string.ascii_letters, k=k))
+            params = {not_param: self.default_value}
+            response = request(url=self.url, verify=SSLVERIFY, **self._wrap_params(params))
+
+            for metric in metrics[:]:
+                if not metric(self._orig_response, response):
+                    metrics.remove(metric)
+
+        if not metrics:
+            raise ValueError('Отсутствуют подходящие метрики '
+                             'для сравнения страниц')
+
+        return metrics
+
+    def is_same(self, r1: Response, r2: Response) -> bool:
+        """
+        Сравнивает две страницы между собой, используя метрики
+        :param r1: Response
+        :param r2: Response
+        :return: True, если страницы идентичны.
+        """
+        return all(metric(r1, r2) for metric in self._metrics)
+
+    def _param_gen(self, q_params: list) -> Generator[dict, None, None]:
+        """
+        Создает генератор порций параметров на проверку-поиск
+        :param q_params: общий список параметров
+        :return: {параметр: значение, }
+        """
+        def qs_line_len(param, value):
+            return len(urlencode(((param, value),)))
+
+        def body_data_len(param, value):
+            return len('{}={}'.format(param, value))
+
+        if self.arg_param == 'params':
+            get_len = qs_line_len
+        else:
+            get_len = body_data_len
+
+        params = {}
+        data_size = 0
+
+        while q_params:
+            q_param = q_params.pop()
+            n_line_len = get_len(q_param, self.default_value)
+            # объем данных = объем всех (закодированных) параметров
+            if data_size + n_line_len + len(params) - 1 > self.max_data_size:
+                yield params.copy()
+                params.clear()
+                data_size = 0
+
+            params[q_param] = self.default_value
+            data_size += n_line_len
+
+        yield params
+
+    @staticmethod
+    def _lev_distance_check(r1: Response, r2: Response) -> bool:
+        """
+        Сравнивает расстояние Левенштейна между двумя страницами
+        :param r1: Response
+        :param r2: Response
+        :return: True, если расстояния равны.
+        """
+        return fuzz.ratio(r1.text, r2.text) == 100
+
+    @staticmethod
+    def _content_length_check(r1: Response, r2: Response) -> bool:
+        """
+        Сравнивает размеры двух страниц
+        :param r1: Response
+        :param r2: Response
+        :return: True, если размеры идентичны.
+        """
+        #print (r1.headers.get('Content-Length', 0))
+        #print (r2.headers.get('Content-Length', 0))
+        return r1.headers.get('Content-Length', 0) == r2.headers.get('Content-Length', 0)
+
+    @staticmethod
+    def _dom_check(r1: Response, r2: Response) -> bool:
+        """
+        Сравнивает количество элементов DOM дерева
+        :param r1: Response
+        :param r2: Response
+        :return: True, если размеры идентичны.
+        """
+        #print (len(BeautifulSoup(r1.text, 'lxml').find_all()))
+        #print (len(BeautifulSoup(r2.text, 'lxml').find_all()))
+
+        #print (len(BeautifulSoup(r1.text, 'html5lib').find_all()))
+        #print (len(BeautifulSoup(r2.text, 'html5lib').find_all()))
+
+        return len(BeautifulSoup(r1.text, 'html5lib').find_all(True)) == len(BeautifulSoup(r2.text, 'html5lib').find_all(True))
+
+    async def find_params(self, q_params: list) -> list:
+        """
+        Асинхронными запросами находит параметры, которые влияют на
+        отображение страницы
+        :param q_params: список названий параметров, среди которых необходимо
+        выполнить поиск
+        :return: список параметров, которые влияют на отображение страницы
+        """
+
+        # поиск тегов, которые содержат атрибут name
+        # вынести в отдельную функцию
+        for tag in BeautifulSoup(self._orig_response.text, 'html5lib').find_all(attrs={"name": True}):
+            q_params.append(tag.attrs.get('name'))
+
+        # поиск и обработка javascript
+        # обязательно вынести в отдельную функцию
+        js=""
+        for script in BeautifulSoup(self._orig_response.text, 'html5lib').find_all('script'):
+            if 'src' in script.attrs:
+                if (urlparse(script.get('src')).netloc!=''):
+                    js += request('get', script.get('src'), verify=SSLVERIFY).text + "\n"
+                else:
+                    src=urljoin(self.url,script.get('src'))
+                    js += request('get', src, verify=SSLVERIFY).text + "\n"
+            else:
+                js += script.text
+
+        jsparse = esprima.tokenize(js)
+
+        for token in jsparse:
+            if token.type == 'Identifier':
+                q_params.append(token.value)
+
+
+        # На всякий случай, оставляем только уникальные параметры
+        q_params = list(set(q_params))
+        print ('Params: ' + str(len(q_params)))
+        ###
+
+        p = PyJsParser()
+        result = []
+        with ProcessPoolExecutor(max_workers=NUM_PROCESSES) as executor:
+            loop = asyncio.get_event_loop()
+            futures = [
+                loop.run_in_executor(
+                    executor,
+                    self._find_params,
+                    params
+                ) for params in self._param_gen(q_params)
+            ]
+            for res in await asyncio.gather(*futures):
+                result.extend(res)
+
+        return result
+
+    def _find_params(self, params: dict) -> list:
+        """
+        Рекурсивно (методом дихотомии) находит параметры, которые влияют на
+        отображение страницы
+        :param params: dict({param_name: param_value})
+        :return: список параметров, которые влияют на отображение страницы
+        """
+        response = request(url=self.url, verify=SSLVERIFY, **self._wrap_params(params))
+        if not self.is_same(self._orig_response, response):
+            if len(params) == 1:
+                return list(params.keys())
+
+            left, right = split_dict(params)
+
+            left_keys = self._find_params(left)
+            right_keys = self._find_params(right)
+
+            return left_keys + right_keys
+
+        return []
+
+    def _wrap_params(self, params: dict) -> dict:
+        """
+        Заворачивает параметры для request в словарь
+        :param params: dict({param_name: param_value})
+        :return: словарь параметров для request
+        """
+        return {**self.req_params, **{self.arg_param: params}}
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-u', '--url', type=str, default='',
+                        help='URL', required=True)
+
+    parser.add_argument('-m', '--method', type=str,
+                        default='GET', help='Тип запроса')
+
+    parser.add_argument('-c', '--cookie', type=str, default='', help='Cookie')
+
+    parser.add_argument('-ua', '--user-agent', type=str, default='Scout', help='User-Agent')
+
+    parser.add_argument('-d', '--default', type=str,
+                        default=1, help='Значение параметров по умолчанию')
+
+    parser.add_argument('-ct', '--content-type', type=str,
+                        default='', help='Content-type')
+
+    parser.add_argument('-f', '--filename', type=str, default='params.txt',
+                        help='Имя файла со списком параметров')
+
+    parser.add_argument('-t', '--timeout', type=int, default=1000,
+                        help='Таймаут между запросами')
+
+    args = parser.parse_args()
+
+    finder = ParamFinder(
+        url=args.url,
+        method=args.method,
+        cookie=args.cookie,
+        useragent=args.user_agent,
+        content_type=args.content_type,
+        default_value=args.default,
+        timeout=args.timeout,
+    )
+
+    with open(args.filename, 'r') as f:
+        params = f.read().splitlines()
+
+    loop = asyncio.get_event_loop()
+    finish=(loop.run_until_complete(finder.find_params(params)))
+
+    print (finish)
+    #print(**self._wrap_params(finish))
