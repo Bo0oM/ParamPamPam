@@ -1,27 +1,22 @@
 # coding=utf-8
 
-import argparse
-import asyncio
-import os
+import argparse, asyncio, random, string, esprima
 from concurrent.futures import ProcessPoolExecutor
 from http.cookies import SimpleCookie
 from itertools import islice
-import random
-import string
 from bs4 import BeautifulSoup
 from typing import Generator
-from pyjsparser import PyJsParser
-import esprima
 from urllib.parse import urlencode, urlparse, urljoin
-
 from requests import request, Response, RequestException
+
 # pip install python-Levenshtein
 from fuzzywuzzy import fuzz
+#
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Тестовые параметры
-PARSE_JS = False
+PARSE_JS = True
 PARSE_HTML = True
 SSLVERIFY = False
 #
@@ -339,7 +334,6 @@ class ParamFinder:
         print ('Params: ' + str(len(q_params)))
         ###
 
-        p = PyJsParser()
         result = []
         with ProcessPoolExecutor(max_workers=NUM_PROCESSES) as executor:
             loop = asyncio.get_event_loop()
