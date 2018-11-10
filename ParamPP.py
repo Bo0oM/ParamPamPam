@@ -20,7 +20,10 @@ from fuzzywuzzy import fuzz
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-SSLVERIFY=False
+# Тестовые параметры
+PARSEJS = False
+SSLVERIFY = False
+#
 USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36'
 URLENCODED_CONTENT_TYPE = 'application/x-www-form-urlencoded'
 DEFAULT_URL_BUF_SIZE = 8192
@@ -310,22 +313,24 @@ class ParamFinder:
 
         # поиск и обработка javascript
         # обязательно вынести в отдельную функцию
-        js=""
-        for script in BeautifulSoup(self._orig_response.text, 'html5lib').find_all('script'):
-            if 'src' in script.attrs:
-                if (urlparse(script.get('src')).netloc!=''):
-                    js += request('get', script.get('src'), verify=SSLVERIFY).text + "\n"
+        if (PARSEJS):
+            print ('pew')
+            js=""
+            for script in BeautifulSoup(self._orig_response.text, 'html5lib').find_all('script'):
+                if 'src' in script.attrs:
+                    if (urlparse(script.get('src')).netloc!=''):
+                        js += request('get', script.get('src'), verify=SSLVERIFY).text + "\n"
+                    else:
+                        src=urljoin(self.url,script.get('src'))
+                        js += request('get', src, verify=SSLVERIFY).text + "\n"
                 else:
-                    src=urljoin(self.url,script.get('src'))
-                    js += request('get', src, verify=SSLVERIFY).text + "\n"
-            else:
-                js += script.text
+                    js += script.text
 
-        jsparse = esprima.tokenize(js)
+            jsparse = esprima.tokenize(js)
 
-        for token in jsparse:
-            if token.type == 'Identifier':
-                q_params.append(token.value)
+            for token in jsparse:
+                if token.type == 'Identifier':
+                    q_params.append(token.value)
 
 
         # На всякий случай, оставляем только уникальные параметры
