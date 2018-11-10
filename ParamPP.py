@@ -21,7 +21,8 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Тестовые параметры
-PARSEJS = False
+PARSE_JS = False
+PARSE_HTML = True
 SSLVERIFY = False
 #
 USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36'
@@ -308,13 +309,13 @@ class ParamFinder:
 
         # поиск тегов, которые содержат атрибут name
         # вынести в отдельную функцию
-        for tag in BeautifulSoup(self._orig_response.text, 'html5lib').find_all(attrs={"name": True}):
-            q_params.append(tag.attrs.get('name'))
+        if (PARSE_HTML):
+            for tag in BeautifulSoup(self._orig_response.text, 'html5lib').find_all(attrs={"name": True}):
+                q_params.append(tag.attrs.get('name'))
 
         # поиск и обработка javascript
         # обязательно вынести в отдельную функцию
-        if (PARSEJS):
-            print ('pew')
+        if (PARSE_JS):
             js=""
             for script in BeautifulSoup(self._orig_response.text, 'html5lib').find_all('script'):
                 if 'src' in script.attrs:
