@@ -293,6 +293,7 @@ class ParamFinder:
 
         return len(BeautifulSoup(r1.text, 'html5lib').find_all(True)) == len(BeautifulSoup(r2.text, 'html5lib').find_all(True))
 
+
     async def find_params(self, q_params: list) -> list:
         """
         Асинхронными запросами находит параметры, которые влияют на
@@ -303,30 +304,12 @@ class ParamFinder:
         """
 
         # поиск тегов, которые содержат атрибут name
-        # вынести в отдельную функцию
         if (PARSE_HTML):
-            for tag in BeautifulSoup(self._orig_response.text, 'html5lib').find_all(attrs={"name": True}):
-                q_params.append(tag.attrs.get('name'))
+            q_params.extend(parse_html(self._orig_response.text))
 
         # поиск и обработка javascript
-        # обязательно вынести в отдельную функцию
         if (PARSE_JS):
-            js=""
-            for script in BeautifulSoup(self._orig_response.text, 'html5lib').find_all('script'):
-                if 'src' in script.attrs:
-                    if (urlparse(script.get('src')).netloc!=''):
-                        js += request('get', script.get('src'), verify=SSLVERIFY).text + "\n"
-                    else:
-                        src=urljoin(self.url,script.get('src'))
-                        js += request('get', src, verify=SSLVERIFY).text + "\n"
-                else:
-                    js += script.text
-
-            jsparse = esprima.tokenize(js)
-
-            for token in jsparse:
-                if token.type == 'Identifier':
-                    q_params.append(token.value)
+            q_params.extend(parse_js(self._orig_response.text, self.url))
 
 
         # На всякий случай, оставляем только уникальные параметры
@@ -378,6 +361,41 @@ class ParamFinder:
         """
         return {**self.req_params, **{self.arg_param: params}}
 
+#def merge_lists(q_params, templist):
+#    for element in templist:
+#      q_params.extend(element)
+#    return q_params
+
+def parse_html(response):
+    print ('Parse html')
+    temp_params = []
+    for tag in BeautifulSoup(response, 'html5lib').find_all(attrs={"name": True}):
+                temp_params.append(tag.attrs.get('name'))
+    print ('New %d params' % (len(temp_params))) 
+    return temp_params
+
+def parse_js(response, url):
+    print ('Parse js')
+    temp_params = []
+    js=""
+    for script in BeautifulSoup(response, 'html5lib').find_all('script'):
+        if 'src' in script.attrs:
+            if (urlparse(script.get('src')).netloc!=''):
+                js += request('get', script.get('src'), verify=SSLVERIFY).text + "\n"
+            else:
+                src=urljoin(url,script.get('src'))
+                js += request('get', src, verify=SSLVERIFY).text + "\n"
+        else:
+            js += script.text
+
+        jsparse = esprima.tokenize(js)
+
+        for token in jsparse:
+            if token.type == 'Identifier':
+                temp_params.append(token.value)
+    temp_params = list(set(temp_params))
+    print ('New %d params' % (len(temp_params))) 
+    return temp_params
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
