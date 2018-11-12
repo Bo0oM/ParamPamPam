@@ -16,7 +16,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Тестовые параметры
-PARSE_JS = True
+PARSE_JS = False
 PARSE_HTML = True
 SSLVERIFY = False
 #
@@ -309,7 +309,7 @@ class ParamFinder:
 
         # поиск и обработка javascript
         if (PARSE_JS):
-            q_params.extend(parse_js(self._orig_response.text, self.url))
+            q_params.extend(get_js(self._orig_response.text, self.url))
 
 
         # На всякий случай, оставляем только уникальные параметры
@@ -374,28 +374,41 @@ def parse_html(response):
     print ('New %d params' % (len(temp_params))) 
     return temp_params
 
-def parse_js(response, url):
+def get_js(response, url):
+    # Ты сюда не смотри! Ты туда смотри!
     print ('Parse js')
-    temp_params = []
+    js_params = []
     js=""
     for script in BeautifulSoup(response, 'html5lib').find_all('script'):
         if 'src' in script.attrs:
             if (urlparse(script.get('src')).netloc!=''):
-                js += request('get', script.get('src'), verify=SSLVERIFY).text + "\n"
+                scheme = urlparse(url).scheme+':' if urlparse(script.get('src')).scheme=='' else ''
+                js_params.extend(parse_js(request('get', scheme+script.get('src'), verify=SSLVERIFY).text))
+                #js += request('get', scheme+script.get('src'), verify=SSLVERIFY).text + "\n"
             else:
                 src=urljoin(url,script.get('src'))
-                js += request('get', src, verify=SSLVERIFY).text + "\n"
+                js_params.extend(parse_js(request('get', src, verify=SSLVERIFY).text))
         else:
-            js += script.text
+            js_params.extend(parse_js(script.text))
 
-        jsparse = esprima.tokenize(js)
 
+    js_params = list(set(js_params))
+    print ('New %d params' % (len(js_params))) 
+    return js_params
+
+def parse_js(text):
+    temp_params = []
+    try:
+        jsparse = esprima.tokenize(text)
         for token in jsparse:
             if token.type == 'Identifier':
                 temp_params.append(token.value)
-    temp_params = list(set(temp_params))
-    print ('New %d params' % (len(temp_params))) 
+    except:
+        pass # блэт, это что, не js?
     return temp_params
+
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
