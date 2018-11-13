@@ -16,7 +16,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Тестовые параметры
-PARSE_JS = False
+PARSE_JS = True
 PARSE_HTML = True
 SSLVERIFY = False
 #
@@ -421,7 +421,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-c', '--cookie', type=str, default='', help='Cookie')
 
-    parser.add_argument('-ua', '--user-agent', type=str, default='Scout', help='User-Agent')
+    parser.add_argument('-ua', '--user-agent', type=str, default=USERAGENT, help='User-Agent')
 
     parser.add_argument('-d', '--default', type=str,
                         default=1, help='Значение параметров по умолчанию')
