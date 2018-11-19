@@ -1,6 +1,6 @@
 # ParamPamPam
 
-This tool for brute discover GET and POST parameters
+This tool for brute discover GET and POST parameters.
 
 **Installation**
 
@@ -18,3 +18,8 @@ echo -e '#!'"/bin/bash\ndocker run -ti --rm parampp \$@" > /usr/local/bin/paramp
 ```
 parampp -u "https://vk.com/login"
 ```
+
+**TODO**
+ * ADD json type
+ * ADD multipart content-type
+ * Fix errors
