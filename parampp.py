@@ -101,12 +101,12 @@ class ParamFinder:
 # Cookie
     @property
     def cookie(self):
-        return self.req_params.get('cookie')
+        return self.req_params.get('cookies')
 
 
     @cookie.setter
     def cookie(self, value):
-        self.req_params['cookie'] = SimpleCookie(value)
+        self.req_params['cookies'] = {key:morsel.value for key, morsel in SimpleCookie(value).items()}
 
 # User-agent
     @property
