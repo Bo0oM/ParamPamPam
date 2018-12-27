@@ -77,7 +77,7 @@ class ParamFinder:
 
         self.default_value = default_value
 
-        self._orig_response = request(url=url, verify=SSLVERIFY, **self.req_params)
+        self._orig_response = request(url=url, allow_redirects=False, verify=SSLVERIFY, **self.req_params)
 
         #!!!
         # Убрана проверка статуса, так как есть смысл брутить параметры у страниц, отдающих ошибки (например 500)
@@ -101,12 +101,12 @@ class ParamFinder:
 # Cookie
     @property
     def cookie(self):
-        return self.req_params.get('cookies')
+        return self.req_params.get('cookie')
 
 
     @cookie.setter
     def cookie(self, value):
-        self.req_params['cookies'] = {key:morsel.value for key, morsel in SimpleCookie(value).items()}
+        self.req_params['cookie'] = SimpleCookie(value)
 
 # User-agent
     @property
@@ -179,7 +179,7 @@ class ParamFinder:
 
         data = 'a' * remained_len
         try:
-            dummy_response = request(url=self.url, verify=SSLVERIFY, **self._wrap_params({data: 1}))
+            dummy_response = request(url=self.url, allow_redirects=False, verify=SSLVERIFY, **self._wrap_params({data: 1}))
         except RequestException as e:
             print( e )
         #print (dummy_response.status_code)
@@ -198,9 +198,9 @@ class ParamFinder:
         metrics = [self._content_length_check, self._lev_distance_check, self._dom_check]
 
         for k in [10, 15, 20]:
-            not_param = ''.join(random.choices(string.ascii_letters, k=k))
+            not_param = ''.join(random.sample(string.ascii_letters, k=k))
             params = {not_param: self.default_value}
-            response = request(url=self.url, verify=SSLVERIFY, **self._wrap_params(params))
+            response = request(url=self.url, allow_redirects=False, verify=SSLVERIFY, **self._wrap_params(params))
 
             for metric in metrics[:]:
                 if not metric(self._orig_response, response):
@@ -339,7 +339,7 @@ class ParamFinder:
         :param params: dict({param_name: param_value})
         :return: список параметров, которые влияют на отображение страницы
         """
-        response = request(url=self.url, verify=SSLVERIFY, **self._wrap_params(params))
+        response = request(url=self.url, allow_redirects=False, verify=SSLVERIFY, **self._wrap_params(params))
         if not self.is_same(self._orig_response, response):
             if len(params) == 1:
                 return list(params.keys())
