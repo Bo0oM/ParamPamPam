@@ -25,6 +25,7 @@ Install Python3
 git clone https://github.com/Bo0oM/ParamPamPam.git
 cd ParamPamPam
 pip3 install --no-cache-dir -r requirements.txt
+
 python3 parampp.py -u "https://vk.com/login"
 ```
 
