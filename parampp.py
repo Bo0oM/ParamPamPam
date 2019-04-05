@@ -27,6 +27,9 @@ DEFAULT_URL_BUF_SIZE = 8192
 ENTITY_TOO_LARGE = 413
 URI_TOO_LARGE = 414
 NUM_PROCESSES = 10
+ENDC = '\033[0m'
+OKGREEN ='\033[92m'
+WARNING ='\033[93m'
 
 
 def split_dict(d: dict) -> (dict, dict):
@@ -49,7 +52,8 @@ class ParamFinder:
     def __init__(self, url, method, cookie='',
                  useragent=USERAGENT,
                  content_type=URLENCODED_CONTENT_TYPE,
-                 default_value=1, timeout=10):
+                 default_value=1, timeout=10,
+                 verbose=0, auth = ''):
         """
         Конструктор ParamFinder
         :param url: URL
@@ -77,19 +81,20 @@ class ParamFinder:
 
         self.default_value = default_value
 
+        self.verbose = verbose
+
+        self.auth = auth
+
         self._orig_response = request(url=url, allow_redirects=False, verify=SSLVERIFY, **self.req_params)
-
-        #!!!
-        # Убрана проверка статуса, так как есть смысл брутить параметры у страниц, отдающих ошибки (например 500)
-        #self._orig_response.raise_for_status()
-
 
         self.max_data_size = self._estimate_data_size(DEFAULT_URL_BUF_SIZE)
         self._metrics = self._choose_metrics()
+        if (self.verbose>0):
+            print ('Origin response; Code={} and lenght={}: and verbose = {}\n'.format(self._orig_response.status_code, len(self._orig_response.content), self.verbose))
+            print ('Chosen metrics: {}\n'.format((self._metrics)))
 
 
 
-# Timeout
     @property
     def timeout(self):
         return self.req_params.get('timeout')
@@ -98,7 +103,7 @@ class ParamFinder:
     def timeout(self, value):
         self.req_params['timeout'] = value
 
-# Cookie
+ 
     @property
     def cookie(self):
         return self.req_params.get('cookies')
@@ -108,7 +113,7 @@ class ParamFinder:
     def cookie(self, value):
         self.req_params['cookies'] = {key:morsel.value for key, morsel in SimpleCookie(value).items()}
 
-# User-agent
+
     @property
     def useragent(self):
         return self.req_params.get('headers', {}).get(
@@ -120,7 +125,7 @@ class ParamFinder:
         headers = self.req_params.setdefault('headers', {})
         headers['User-agent'] = value
 
-# Content-type
+
     @property
     def content_type(self):
         return self.req_params.get('headers', {}).get(
@@ -133,7 +138,7 @@ class ParamFinder:
         headers['Content-Type'] = value
         self._setup_arg_param()
 
-# Method
+
     @property
     def method(self):
         return self.req_params.get('method')
@@ -141,7 +146,18 @@ class ParamFinder:
     @method.setter
     def method(self, value):
         self.req_params['method'] = value.lower()
-        self._setup_arg_param()
+        self._setup_arg_param()   
+  
+    @property
+    def auth(self):
+        return self.req_params.get('headers',{}).get(
+                'Autorization',''
+        )
+    
+    @auth.setter
+    def auth(self,value):
+        headers = self.req_params.setdefault('headers', {})
+        headers['Authorization']=value
 
     def _setup_arg_param(self):
         """
@@ -201,6 +217,9 @@ class ParamFinder:
             not_param = ''.join(random.sample(string.ascii_letters, k=k))
             params = {not_param: self.default_value}
             response = request(url=self.url, allow_redirects=False, verify=SSLVERIFY, **self._wrap_params(params))
+            if (self.verbose>0):
+                print ('\nResponse from metrics {}'.format(response.content))
+                print ('\nParams for metrics {}'.format(params))
 
             for metric in metrics[:]:
                 if not metric(self._orig_response, response):
@@ -273,9 +292,11 @@ class ParamFinder:
         :param r2: Response
         :return: True, если размеры идентичны.
         """
-        #print (r1.headers.get('Content-Length', 0))
-        #print (r2.headers.get('Content-Length', 0))
-        return r1.headers.get('Content-Length', 0) == r2.headers.get('Content-Length', 0)
+        #if (.verbose>0):
+        #    print ('Origin Content-Length header: %s' % r1.headers.get('Content-Length', 0))
+        #    print ('New Content-Length header: %s ' % r2.headers.get('Content-Length', 0))
+
+        return r1.headers.get('Content-Length', 0) == r2.headers.get('Content-Length', 0) and len(r1.content) == len(r2.content)
 
     @staticmethod
     def _dom_check(r1: Response, r2: Response) -> bool:
@@ -314,7 +335,7 @@ class ParamFinder:
 
         # На всякий случай, оставляем только уникальные параметры
         q_params = list(set(q_params))
-        print ('Params: ' + str(len(q_params)))
+        print ('Common count of have checked params: {}'.format(str(len(q_params))))
         ###
 
         result = []
@@ -339,7 +360,12 @@ class ParamFinder:
         :param params: dict({param_name: param_value})
         :return: список параметров, которые влияют на отображение страницы
         """
+        
         response = request(url=self.url, allow_redirects=False, verify=SSLVERIFY, **self._wrap_params(params))
+        if (self.verbose>0):
+            print ('New request with params\n: {}'.format(response.url))
+            print ("New response new: {}\n".format(str(response.content)))
+            print ("This site is the same? Answer: {}\n\n".format(str(self.is_same(self._orig_response, response))))        
         if not self.is_same(self._orig_response, response):
             if len(params) == 1:
                 return list(params.keys())
@@ -367,16 +393,18 @@ class ParamFinder:
 #    return q_params
 
 def parse_html(response):
-    print ('Parse html')
+    print ('Parsing HTML')
     temp_params = []
     for tag in BeautifulSoup(response, 'html5lib').find_all(attrs={"name": True}):
                 temp_params.append(tag.attrs.get('name'))
-    print ('New %d params' % (len(temp_params))) 
+    print ('{}Found {} new params in html{}'.format(OKGREEN,len(temp_params), ENDC))
+    #if len(temp_params) > 0:
+    #    print (temp_params)
     return temp_params
 
 def get_js(response, url):
     # Ты сюда не смотри! Ты туда смотри!
-    print ('Parse js')
+    print ('Parsing JavaScript')
     js_params = []
     js=""
     for script in BeautifulSoup(response, 'html5lib').find_all('script'):
@@ -384,7 +412,6 @@ def get_js(response, url):
             if (urlparse(script.get('src')).netloc!=''):
                 scheme = urlparse(url).scheme+':' if urlparse(script.get('src')).scheme=='' else ''
                 js_params.extend(parse_js(request('get', scheme+script.get('src'), verify=SSLVERIFY).text))
-                #js += request('get', scheme+script.get('src'), verify=SSLVERIFY).text + "\n"
             else:
                 src=urljoin(url,script.get('src'))
                 js_params.extend(parse_js(request('get', src, verify=SSLVERIFY).text))
@@ -393,7 +420,9 @@ def get_js(response, url):
 
 
     js_params = list(set(js_params))
-    print ('New %d params' % (len(js_params))) 
+    print ('{}Found {} new params in js {}\n'.format(OKGREEN,len(js_params),ENDC))
+    #if len(js_params)>0:
+    #    print (js_params)
     return js_params
 
 def parse_js(text):
@@ -435,7 +464,14 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--timeout', type=int, default=1000,
                         help='Таймаут между запросами')
 
+    parser.add_argument('-v','--verbose', type=int, default=0,help='Level of logs')
+
+    parser.add_argument('-a', '--auth', type=str, default='',help='Authorization header')
+    
+
     args = parser.parse_args()
+
+    print ("Start up...")
 
     finder = ParamFinder(
         url=args.url,
@@ -445,6 +481,8 @@ if __name__ == '__main__':
         content_type=args.content_type,
         default_value=args.default,
         timeout=args.timeout,
+        verbose=args.verbose,
+        auth=args.auth
     )
 
     with open(args.filename, 'r') as f:
@@ -452,6 +490,12 @@ if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
     finish=(loop.run_until_complete(finder.find_params(params)))
+    
+    print ('{}I\'ve found {} new real parametrs in follow request{}'.format(OKGREEN,len(finish),ENDC))
+    link = args.url
+    for param in finish:
+        link+='&'+param+'='+str(args.default)
 
-    print (finish)
+    print (OKGREEN + link + ENDC)
+
     #print(**self._wrap_params(finish))
