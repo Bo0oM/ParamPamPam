@@ -335,7 +335,14 @@ class ParamFinder:
 
         # На всякий случай, оставляем только уникальные параметры
         q_params = list(set(q_params))
-        print ('Common count of have checked params: {}'.format(str(len(q_params))))
+        try:
+            with open('new_params.txt', 'w') as f:
+                for p in q_params:
+                    f.write("%s\n" % p)
+                print("New params were saved in new_params.txt")
+        except Exception as e:
+            print( e )
+        print ('Common count of have just checked params: {}'.format(str(len(q_params))))
         ###
 
         result = []
@@ -398,8 +405,8 @@ def parse_html(response):
     for tag in BeautifulSoup(response, 'html5lib').find_all(attrs={"name": True}):
                 temp_params.append(tag.attrs.get('name'))
     print ('{}Found {} new params in html{}'.format(OKGREEN,len(temp_params), ENDC))
-    if len(temp_params) > 0:
-        print (temp_params)
+    #if len(temp_params) > 0:
+    #    print (temp_params)
     return temp_params
 
 def get_js(response, url):
@@ -411,6 +418,7 @@ def get_js(response, url):
         if 'src' in script.attrs:
             if (urlparse(script.get('src')).netloc!=''):
                 scheme = urlparse(url).scheme+':' if urlparse(script.get('src')).scheme=='' else ''
+                js_params.extend(parse_js(request('get', scheme+script.get('src'), verify=SSLVERIFY).text))
             else:
                 src=urljoin(url,script.get('src'))
                 js_params.extend(parse_js(request('get', src, verify=SSLVERIFY).text))
@@ -420,8 +428,8 @@ def get_js(response, url):
 
     js_params = list(set(js_params))
     print ('{}Found {} new params in js {}\n'.format(OKGREEN,len(js_params),ENDC))
-    if len(js_params)>0:
-        print (js_params)
+    #if len(js_params)>0:
+    #    print (js_params)
     return js_params
 
 def parse_js(text):
@@ -490,7 +498,7 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     finish=(loop.run_until_complete(finder.find_params(params)))
     
-    print ('{}I\'ve found {} new real parametrs in follow request{}'.format(OKGREEN,len(finish),ENDC))
+    print ('{}I\'ve found {} new real parameters in follow request{}'.format(OKGREEN,len(finish),ENDC))
     link = args.url
     for param in finish:
         link+='&'+param+'='+str(args.default)
