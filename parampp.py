@@ -335,7 +335,14 @@ class ParamFinder:
 
         # На всякий случай, оставляем только уникальные параметры
         q_params = list(set(q_params))
-        print ('Common count of have checked params: {}'.format(str(len(q_params))))
+        try:
+            with open('new_params.txt', 'w') as f:
+                for p in q_params:
+                    f.write("%s\n" % p)
+                print("New params were saved in new_params.txt")
+        except Exception as e:
+            print( e )
+        print ('Common count of have just checked params: {}'.format(str(len(q_params))))
         ###
 
         result = []
@@ -491,7 +498,7 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     finish=(loop.run_until_complete(finder.find_params(params)))
     
-    print ('{}I\'ve found {} new real parametrs in follow request{}'.format(OKGREEN,len(finish),ENDC))
+    print ('{}I\'ve found {} new real parameters in follow request{}'.format(OKGREEN,len(finish),ENDC))
     link = args.url
     for param in finish:
         link+='&'+param+'='+str(args.default)
