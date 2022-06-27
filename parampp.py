@@ -10,7 +10,7 @@ from urllib.parse import urlencode, urlparse, urljoin
 from requests import request, Response, RequestException
 
 # pip install python-Levenshtein
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 #
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
