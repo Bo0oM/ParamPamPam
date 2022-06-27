@@ -55,14 +55,14 @@ class ParamFinder:
                  default_value=1, timeout=10,
                  verbose=0, auth = ''):
         """
-        Конструктор ParamFinder
+        ParamFinder constructor
         :param url: URL
-        :param method: тип запроса (GET, POST, PUT)
-        :param cookie: строка с куками
-        :param content_type: тип содержимого
-        :param useragent: ну логично же, что это
-        :param default_value: значение для параметра по умолчанию
-        :param timeout: таймаут запросов
+        :param method: request type (GET, POST, PUT)
+        :param cookie: cookie string
+        :param content_type: content type
+        :param useragent: you can guess what it is
+        :param default_value: The value for the default
+        :param timeout: request timeout
         """
         self.url = url
         self.req_params = {
@@ -161,12 +161,12 @@ class ParamFinder:
 
     def _setup_arg_param(self):
         """
-        Настраивает параметр для запроса в зависимости от типа запроса и
-        типа содержимого
+        Configures the parameter for the request depending on 
+        the type of request and the type of content
         :return:
         """
-        # для POST/PUT и не urlencoded помещаем данные в тело запроса,
-        # в противном случае - query string
+        # for POST/PUT and not urlencoded put the data in the
+        # body of the request, else - query string
         if (self.method in {'post', 'put'}
                 and self.content_type != URLENCODED_CONTENT_TYPE):
             self.arg_param = 'data'
@@ -175,22 +175,22 @@ class ParamFinder:
 
     def _estimate_data_size(self, buf_size):
         """
-        Вычисляет макс. допустимый объем данных для отправки
-        :param buf_size: начальное значение
-        :return: макс. объем (в байтах)
+        Calculates the maximum allowed amount of data to send
+        :param buf_size: initial value
+        :return: max volume (in bytes)
         """
         if self.arg_param == 'params':
-            # Остаточный размер URI =
-            #   размер буфера -
-            #   длина базового +
-            #   "мусорная" длина (не учитывается сервером) -
-            #   3 (доп. символа)
+            # Residual URI size
+            # buffer size -
+            # length of base +
+            # "trash" length (not counted by the server) -
+            # 3 (extra characters)
 
             fullurl = urlparse(self.url)
             trash_len = len(fullurl.scheme+'://'+fullurl.netloc)
             remained_len = buf_size - len(self.url) + trash_len - 3
         else:
-            # Остаточный размер данных = размер буфера - 2 (доп. символа)
+            # Residual data size = buffer size - 2 (extra characters)
             remained_len = buf_size - 2
 
         data = 'a' * remained_len
@@ -202,13 +202,13 @@ class ParamFinder:
         if dummy_response.status_code in {ENTITY_TOO_LARGE, URI_TOO_LARGE}:
             return self._estimate_data_size(buf_size // 2)
 
-        # Не учитываем два доп. символа в итоге
+        # Ignore the two extra characters 
         return remained_len + 2
 
     def _choose_metrics(self) -> list:
         """
-        Выбирает метрики, подходящие для сравнения страниц между собой.
-        :return: Список метрик (функторов)
+        Selects metrics suitable for comparing pages against each other.
+        :return: List of metrics (functors)
         """
 
         metrics = [self._content_length_check, self._lev_distance_check, self._dom_check]
@@ -226,25 +226,25 @@ class ParamFinder:
                     metrics.remove(metric)
 
         if not metrics:
-            raise ValueError('Отсутствуют подходящие метрики '
-                             'для сравнения страниц')
+            raise ValueError('There are no appropriate metrics '
+                             'to compare pages')
 
         return metrics
 
     def is_same(self, r1: Response, r2: Response) -> bool:
         """
-        Сравнивает две страницы между собой, используя метрики
+        Compares two pages with each other using metrics
         :param r1: Response
         :param r2: Response
-        :return: True, если страницы идентичны.
+        :return: True if the pages are identical.
         """
         return all(metric(r1, r2) for metric in self._metrics)
 
     def _param_gen(self, q_params: list) -> Generator[dict, None, None]:
         """
-        Создает генератор порций параметров на проверку-поиск
-        :param q_params: общий список параметров
-        :return: {параметр: значение, }
+        Creates a generator of parameter portions to check-search
+        :param q_params: generic parameter list
+        :return: {parameter: value, }
         """
         def qs_line_len(param, value):
             return len(urlencode(((param, value),)))
@@ -263,7 +263,7 @@ class ParamFinder:
         while q_params:
             q_param = q_params.pop()
             n_line_len = get_len(q_param, self.default_value)
-            # объем данных = объем всех (закодированных) параметров
+            # data volume = volume of all (encoded) parameters
             if data_size + n_line_len + len(params) - 1 > self.max_data_size:
                 yield params.copy()
                 params.clear()
@@ -277,20 +277,20 @@ class ParamFinder:
     @staticmethod
     def _lev_distance_check(r1: Response, r2: Response) -> bool:
         """
-        Сравнивает расстояние Левенштейна между двумя страницами
+        Compares the Levenshtein distance between two pages
         :param r1: Response
         :param r2: Response
-        :return: True, если расстояния равны.
+        :return: True if the distances are equal.
         """
         return fuzz.ratio(r1.text, r2.text) == 100
 
     @staticmethod
     def _content_length_check(r1: Response, r2: Response) -> bool:
         """
-        Сравнивает размеры двух страниц
+        Compares the size of the two pages
         :param r1: Response
         :param r2: Response
-        :return: True, если размеры идентичны.
+        :return: True if the sizes are identical.
         """
         #if (.verbose>0):
         #    print ('Origin Content-Length header: %s' % r1.headers.get('Content-Length', 0))
@@ -301,10 +301,10 @@ class ParamFinder:
     @staticmethod
     def _dom_check(r1: Response, r2: Response) -> bool:
         """
-        Сравнивает количество элементов DOM дерева
+        Compares the number of elements in the DOM tree
         :param r1: Response
         :param r2: Response
-        :return: True, если размеры идентичны.
+        :return: True if the sizes are identical.
         """
         #print (len(BeautifulSoup(r1.text, 'lxml').find_all()))
         #print (len(BeautifulSoup(r2.text, 'lxml').find_all()))
@@ -317,23 +317,21 @@ class ParamFinder:
 
     async def find_params(self, q_params: list) -> list:
         """
-        Асинхронными запросами находит параметры, которые влияют на
-        отображение страницы
-        :param q_params: список названий параметров, среди которых необходимо
-        выполнить поиск
-        :return: список параметров, которые влияют на отображение страницы
+        Asynchronous queries find parameters that affect the display of the page
+        :param q_params: a list of parameter names to search for
+        :return: a list of parameters that affect the display of the page
         """
 
-        # поиск тегов, которые содержат атрибут name
+        # search for tags that contain the name attribute
         if (PARSE_HTML):
             q_params.extend(parse_html(self._orig_response.text))
 
-        # поиск и обработка javascript
+        # javascript search and processing
         if (PARSE_JS):
             q_params.extend(get_js(self._orig_response.text, self.url))
 
 
-        # На всякий случай, оставляем только уникальные параметры
+        # Just in case, we leave only unique parameters
         q_params = list(set(q_params))
         try:
             with open('new_params.txt', 'w') as f:
@@ -362,10 +360,9 @@ class ParamFinder:
 
     def _find_params(self, params: dict) -> list:
         """
-        Рекурсивно (методом дихотомии) находит параметры, которые влияют на
-        отображение страницы
-        :param params: dict({param_name: param_value})
-        :return: список параметров, которые влияют на отображение страницы
+        Recursively (by dichotomy) finds parameters that affect the display of the page
+        :params: dict({param_name: param_value})
+        :return: list of parameters that affect the display of the page
         """
         
         response = request(url=self.url, allow_redirects=False, verify=SSLVERIFY, **self._wrap_params(params))
@@ -388,9 +385,9 @@ class ParamFinder:
 
     def _wrap_params(self, params: dict) -> dict:
         """
-        Заворачивает параметры для request в словарь
-        :param params: dict({param_name: param_value})
-        :return: словарь параметров для request
+        Wraps the parameters for the request into a dictionary
+        :params: dict({param_name: param_value})
+        :return: parameter dictionary for request
         """
         return {**self.req_params, **{self.arg_param: params}}
 
@@ -410,7 +407,7 @@ def parse_html(response):
     return temp_params
 
 def get_js(response, url):
-    # Ты сюда не смотри! Ты туда смотри!
+    # There may be better ways to parse js, but for now this
     print ('Parsing JavaScript')
     js_params = []
     js=""
@@ -440,7 +437,7 @@ def parse_js(text):
             if token.type == 'Identifier':
                 temp_params.append(token.value)
     except:
-        pass # блэт, это что, не js?
+        pass # oops, isn't that js?
     return temp_params
 
 
@@ -453,23 +450,23 @@ if __name__ == '__main__':
                         help='URL', required=True)
 
     parser.add_argument('-m', '--method', type=str,
-                        default='GET', help='Тип запроса')
+                        default='GET', help='Type of request')
 
     parser.add_argument('-c', '--cookie', type=str, default='', help='Cookie')
 
     parser.add_argument('-ua', '--user-agent', type=str, default=USERAGENT, help='User-Agent')
 
     parser.add_argument('-d', '--default', type=str,
-                        default=1, help='Значение параметров по умолчанию')
+                        default=1, help='Default parameter value')
 
     parser.add_argument('-ct', '--content-type', type=str,
                         default='', help='Content-type')
 
     parser.add_argument('-f', '--filename', type=str, default='params.txt',
-                        help='Имя файла со списком параметров')
+                        help='File name with a list of parameters')
 
     parser.add_argument('-t', '--timeout', type=int, default=10,
-                        help='Таймаут между запросами')
+                        help='Timeout between requests')
 
     parser.add_argument('-v','--verbose', type=int, default=0,help='Level of logs')
 
