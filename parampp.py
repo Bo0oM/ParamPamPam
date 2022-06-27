@@ -468,7 +468,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--filename', type=str, default='params.txt',
                         help='Имя файла со списком параметров')
 
-    parser.add_argument('-t', '--timeout', type=int, default=1000,
+    parser.add_argument('-t', '--timeout', type=int, default=10,
                         help='Таймаут между запросами')
 
     parser.add_argument('-v','--verbose', type=int, default=0,help='Level of logs')
