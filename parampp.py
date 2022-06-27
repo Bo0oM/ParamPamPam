@@ -34,7 +34,7 @@ WARNING ='\033[93m'
 
 def split_dict(d: dict) -> (dict, dict):
     """
-    Разбивает словарь d пополам
+    Splits dictionary d in half
     :param d: dict
     :return: dict, dict
     """
@@ -333,13 +333,17 @@ class ParamFinder:
 
         # Just in case, we leave only unique parameters
         q_params = list(set(q_params))
-        try:
-            with open('new_params.txt', 'w') as f:
-                for p in q_params:
-                    f.write("%s\n" % p)
-                print("New params were saved in new_params.txt")
-        except Exception as e:
-            print( e )
+        
+        # Save to file founded parameters
+        if len(q_params)>0:
+            try:
+                with open('new_params.txt', 'w') as f:
+                    for p in q_params:
+                        f.write("%s\n" % p)
+                    print("New params were saved in new_params.txt")
+            except Exception as e:
+                print( e )
+                
         print ('Common count of have just checked params: {}'.format(str(len(q_params))))
         ###
 
@@ -498,7 +502,8 @@ if __name__ == '__main__':
     print ('{}I\'ve found {} new real parameters in follow request{}'.format(OKGREEN,len(finish),ENDC))
     link = args.url
     for param in finish:
-        link+='&'+param+'='+str(args.default)
+        link+='
+        '+param+'='+str(args.default)
 
     print (OKGREEN + link + ENDC)
 
