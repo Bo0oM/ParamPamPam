@@ -403,8 +403,11 @@ class ParamFinder:
 def parse_html(response):
     print ('Parsing HTML')
     temp_params = []
-    for tag in BeautifulSoup(response, 'html5lib').find_all(attrs={"name": True}):
+    bs_response = BeautifulSoup(response, 'html5lib')
+    for tag in bs_response.find_all(attrs={"name": True}):
                 temp_params.append(tag.attrs.get('name'))
+    for tag in bs_response.find_all(attrs={"id": True}):
+                temp_params.append(tag.attrs.get('id'))
     print ('{}Found {} new params in html{}'.format(OKGREEN,len(temp_params), ENDC))
     #if len(temp_params) > 0:
     #    print (temp_params)
