@@ -505,7 +505,7 @@ if __name__ == '__main__':
     print ('{}I\'ve found {} new real parameters in follow request{}'.format(OKGREEN,len(finish),ENDC))
     link = args.url
     for param in finish:
-        link+='&'+param+'='+str(args.default)
+        link+='?'+param+'='+str(args.default)
 
     print (OKGREEN + link + ENDC)
 
